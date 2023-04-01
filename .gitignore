@@ -1,0 +1,4 @@
+/target
+/ignore
+**/*/__pycache__
+**/*index.json

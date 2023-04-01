@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unplugged search engine | search results</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+    <header class="search-bar">
+        <a href="/">
+            <h1 class="search-title">Unplugged search</h1>
+        </a>
+        <form class="search" action="/search" method="get">
+            <input class="search" id="query" name="query" type="text" value="{{ query }}" />
+        </form>
+    </header>
+    <p>Search results of: <strong>{{ query }}</strong></p>
+    <br>
+    <main class="wrapper">
+        <ul>
+            {% for episode in episodes %}
+            <li class="episode">
+                <a href="{{ episode.url }}">
+                    <header>
+                        <h3>{{ episode.title }}</h3>
+                        <span class="date">{{ episode.date }}</span>
+                        <span class="duration">{{ episode.duration }}</span>
+                    </header>
+                </a>
+                <div class="tags">
+                    {% for tag in episode.tags %}
+                    <a href='/search?query="{{ tag }}"'>
+                        <span class="tag">{{ tag }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </main>
+</body>
+
+</html>
