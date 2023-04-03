@@ -88,12 +88,15 @@ def page_content_to_episodes(content: str) -> Episodes:
         span_elements = html_episode.find_all("span")
 
         # get date
-        times = filter_empty_items([d.text for d in span_elements[0]])
-        date = parse_date(times[0])
-        duration = times[1]
+        times = filter_empty_items([d.text for d in span_elements[0]]) \
+            if len(span_elements) > 0 else []
+
+        date = parse_date(times[0]) if len(times) > 0 else ""
+        duration = times[1] if len(times) > 1 else ""
 
         # get tags
-        tags = filter_empty_items(span_elements[1].text.split(","))
+        tags = filter_empty_items(span_elements[1].text.split(
+            ",")) if len(span_elements) > 1 else []
 
         episodes.append(
             Episode(episode_id, title, date, duration, tags, episode_url))
@@ -131,7 +134,8 @@ def get_all_episodes() -> Episodes:
 
 def index_episodes(all_episodes: Episodes) -> None:
     episodes_by_id: Dict[int, Episode] = dict()
-    episodes_by_tag: Dict[str, List[str]] = dict()
+    # Map<tag, episode_id>
+    episodes_by_tag: Dict[str, List[int]] = dict()
     all_tags: Set[str] = set()
     tags_to_list: Dict[str, List[str]] = dict()
 
@@ -142,15 +146,19 @@ def index_episodes(all_episodes: Episodes) -> None:
         for tag in set(episode.tags):
             # map tag to episode
             tag = tag.lower().strip()
-            episodes_by_tag[tag] = episode
+
+            episode_ids = episodes_by_tag.get(tag, [])
+            episode_ids.append(episode.id)
+            episodes_by_tag[tag] = episode_ids
+
             all_tags.add(tag)
 
     for tag in all_tags:
         # map tag to similar tags
         tags_to_list[tag] = [x for x in all_tags if x.find(tag) != -1]
 
-    episodes_by_id = {k: v.__dict__ for k, v in episodes_by_id.items()}
-    episodes_by_tag = {k: v.__dict__ for k, v in episodes_by_tag.items()}
+    # save json data
+    episodes_by_id = {k: ep.__dict__ for k, ep in episodes_by_id.items()}
 
     write_file(EPISODES_BY_ID_FILENAME, json.dumps(
         episodes_by_id, indent=2, sort_keys=True))

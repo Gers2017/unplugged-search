@@ -10,7 +10,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tera::{Context, Tera};
 use unplugged_engine::{
-    parse_episodes_by_id, parse_episodes_by_tag, parse_query, Episode, EpisodesById, EpisodesByTag,
+    get_episodes_from_ids, load_common_words, parse_episodes_by_id, parse_episodes_by_tag,
+    parse_query, parse_tag_by_tags, Episode, EpisodesById, EpisodesByTag, TagsByTag,
 };
 
 pub fn compile_templates() -> Tera {
@@ -22,6 +23,8 @@ pub fn compile_templates() -> Tera {
 pub struct AppState {
     pub episodes_by_tag: EpisodesByTag,
     pub episodes_by_id: EpisodesById,
+    pub tags_by_tag: TagsByTag,
+    pub common_words: HashSet<String>,
     pub tera: Tera,
 }
 
@@ -33,6 +36,9 @@ async fn main() {
 
     let episodes_by_tag = parse_episodes_by_tag().await;
     let episodes_by_id = parse_episodes_by_id().await;
+    let tags_by_tag = parse_tag_by_tags().await;
+    let common_words: HashSet<_> = load_common_words();
+
     let tera = compile_templates();
 
     let serve_dir = ServeDir::new("static");
@@ -45,6 +51,8 @@ async fn main() {
         .with_state(Arc::new(AppState {
             episodes_by_tag,
             episodes_by_id,
+            tags_by_tag,
+            common_words,
             tera,
         }));
 
@@ -69,18 +77,6 @@ async fn handle_search(
     let query = search.query.clone();
     let mut search_results: HashSet<Episode> = HashSet::new();
 
-    let common_words = [
-        "the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not", "on",
-        "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we",
-        "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", "their",
-        "what", "so", "up", "out", "if", "about", "who", "get", "which", "me", "when", "make",
-        "can", "like", "time", "no", "just", "him", "know", "take", "people", "into", "year",
-        "your", "some", "could", "them", "see", "other", "than", "then", "now", "look", "only",
-        "come", "its", "it's", "over", "think", "also", "back", "after", "use", "two", "how",
-        "our", "work", "first", "well", "way", "even", "new", "want", "because", "any", "these",
-        "give", "day", "most", "us", "was", "from",
-    ];
-
     let mut terms: HashSet<_> = query
         .split_whitespace()
         .map(|x| x.trim().to_lowercase())
@@ -91,18 +87,24 @@ async fn handle_search(
                 x
             }
         })
-        .filter(|x| !common_words.contains(&x.as_str()))
+        .filter(|x| !state.common_words.contains(x))
         .collect();
 
     let parsed_terms = parse_query(&query);
     terms.extend(parsed_terms);
 
-    for (tag, episodes) in state.episodes_by_tag.iter() {
+    let episodes_by_tag: Vec<_> = state
+        .episodes_by_tag
+        .iter()
+        .map(|(tag, ids)| (tag, get_episodes_from_ids(ids, &state.episodes_by_id)))
+        .collect();
+
+    for (tag, episodes) in episodes_by_tag.iter() {
         if terms
             .iter()
-            .any(|term| tag.contains(term) || term.contains(tag))
+            .any(|term| tag.contains(term) || term.contains(*tag))
         {
-            search_results.extend(episodes.iter().map(|episode| episode.clone()));
+            search_results.extend(episodes.iter().map(|episode| (**episode).clone()));
         }
     }
 
