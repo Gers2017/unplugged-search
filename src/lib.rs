@@ -89,17 +89,7 @@ pub fn parse_query(query: &str) -> Vec<String> {
     let mut parsed_items = Vec::new();
 
     while parser.is_not_at_end() {
-        if parser.peek().is_alphanumeric() {
-            let mut term = String::new();
-
-            while parser.is_not_at_end() && !parser.peek().is_whitespace() {
-                term.push(parser.peek());
-                parser.advance();
-            }
-
-            parsed_items.push(term);
-
-            // skip ' '
+        if parser.peek().is_whitespace() {
             parser.advance();
         } else if parser.peek() == '"' {
             // skip '"'
@@ -118,7 +108,17 @@ pub fn parse_query(query: &str) -> Vec<String> {
 
             // skip '"'
             parser.advance();
-        } else if parser.peek().is_whitespace() {
+        } else {
+            let mut term = String::new();
+
+            while parser.is_not_at_end() && !parser.peek().is_whitespace() {
+                term.push(parser.peek());
+                parser.advance();
+            }
+
+            parsed_items.push(term);
+
+            // skip ' '
             parser.advance();
         }
     }
@@ -155,6 +155,15 @@ mod tests {
         assert_eq!(results.get(0), Some(&String::from("foo")));
         assert_eq!(results.get(1), Some(&String::from("bar")));
         assert_eq!(results.get(2), Some(&String::from("bee")));
+
+        let query = String::from("??? --- ### foo bar $$$ 😸😸😸");
+        let results = parse_query(&query);
+        assert!(results.len() > 0);
+
+        assert!(results.contains(&String::from("???")));
+        assert!(results.contains(&String::from("foo")));
+        assert!(results.contains(&String::from("bar")));
+        assert!(results.contains(&String::from("😸😸😸")));
     }
 
     #[test]
