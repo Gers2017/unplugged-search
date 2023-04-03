@@ -5,13 +5,13 @@ use axum::{Router, Server};
 use tower_http::services::{ServeDir, ServeFile};
 
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tera::{Context, Tera};
 use unplugged_engine::{
     get_episodes_from_ids, load_common_words, parse_episodes_by_id, parse_episodes_by_tag,
-    parse_query, parse_tag_by_tags, Episode, EpisodesById, EpisodesByTag, TagsByTag,
+    parse_query, Episode, EpisodesById, EpisodesByTag,
 };
 
 pub fn compile_templates() -> Tera {
@@ -23,7 +23,6 @@ pub fn compile_templates() -> Tera {
 pub struct AppState {
     pub episodes_by_tag: EpisodesByTag,
     pub episodes_by_id: EpisodesById,
-    pub tags_by_tag: TagsByTag,
     pub common_words: HashSet<String>,
     pub tera: Tera,
 }
@@ -36,7 +35,6 @@ async fn main() {
 
     let episodes_by_tag = parse_episodes_by_tag().await;
     let episodes_by_id = parse_episodes_by_id().await;
-    let tags_by_tag = parse_tag_by_tags().await;
     let common_words: HashSet<_> = load_common_words();
 
     let tera = compile_templates();
@@ -51,7 +49,6 @@ async fn main() {
         .with_state(Arc::new(AppState {
             episodes_by_tag,
             episodes_by_id,
-            tags_by_tag,
             common_words,
             tera,
         }));
@@ -83,16 +80,19 @@ async fn handle_search(
         .filter(|s| !state.common_words.contains(s))
         .collect();
 
-    let episodes_by_tag: Vec<_> = state
+    let episodes_by_tag: HashMap<String, Vec<&Episode>> = state
         .episodes_by_tag
         .iter()
         .map(|(tag, ids)| (tag, get_episodes_from_ids(ids, &state.episodes_by_id)))
-        .collect();
+        .fold(HashMap::new(), |mut acc, (tag, episodes)| {
+            acc.insert(tag.to_string(), episodes);
+            acc
+        });
 
     for (tag, episodes) in episodes_by_tag.iter() {
         if terms
             .iter()
-            .any(|term| tag.contains(term) || term.contains(*tag))
+            .any(|term| tag.contains(term) || term.contains(tag))
         {
             search_results.extend(episodes.iter().map(|episode| (**episode).clone()));
         }

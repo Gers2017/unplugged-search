@@ -19,11 +19,9 @@ impl Into<String> for Episode {
 
 const EPISODES_BY_ID_FILE: &str = "episodes_by_id_index.json";
 const EPISODES_BY_TAG_FILE: &str = "episodes_by_tag_index.json";
-const TAG_BY_TAGS_FILE: &str = "tags_by_tag_index.json";
 
 pub type EpisodesById = HashMap<usize, Episode>;
 pub type EpisodesByTag = HashMap<String, Vec<usize>>;
-pub type TagsByTag = HashMap<String, Vec<String>>;
 
 pub async fn parse_episodes_by_tag() -> EpisodesByTag {
     parse_json_file::<EpisodesByTag>(EPISODES_BY_TAG_FILE).await
@@ -31,10 +29,6 @@ pub async fn parse_episodes_by_tag() -> EpisodesByTag {
 
 pub async fn parse_episodes_by_id() -> EpisodesById {
     parse_json_file::<EpisodesById>(EPISODES_BY_ID_FILE).await
-}
-
-pub async fn parse_tag_by_tags() -> TagsByTag {
-    parse_json_file::<TagsByTag>(TAG_BY_TAGS_FILE).await
 }
 
 pub fn get_episodes_from_ids<'a>(ids: &[usize], by_id: &'a EpisodesById) -> Vec<&'a Episode> {
