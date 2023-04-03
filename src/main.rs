@@ -77,21 +77,11 @@ async fn handle_search(
     let query = search.query.clone();
     let mut search_results: HashSet<Episode> = HashSet::new();
 
-    let mut terms: HashSet<_> = query
-        .split_whitespace()
-        .map(|x| x.trim().to_lowercase())
-        .map(|x| {
-            if x.contains("\"") {
-                x.replace("\"", "")
-            } else {
-                x
-            }
-        })
-        .filter(|x| !state.common_words.contains(x))
+    let terms: HashSet<_> = parse_query(&query)
+        .iter()
+        .map(|s| s.to_lowercase())
+        .filter(|s| !state.common_words.contains(s))
         .collect();
-
-    let parsed_terms = parse_query(&query);
-    terms.extend(parsed_terms);
 
     let episodes_by_tag: Vec<_> = state
         .episodes_by_tag
@@ -126,11 +116,16 @@ async fn handle_search(
     let mut search_results_with_score: Vec<_> = search_results
         .iter()
         .map(|episode| {
-            let mut score = episode
-                .tags
-                .iter()
-                .fold(0, |acc, tag| acc + if terms.contains(tag) { 50 } else { 0 });
+            let mut score = episode.tags.iter().fold(0, |acc, tag| {
+                // scores for tag
+                acc + if terms.contains(tag) || terms.iter().any(|term| tag.contains(term)) {
+                    50
+                } else {
+                    0
+                }
+            });
 
+            // scores for title
             score += terms.iter().fold(0, |acc, term| {
                 acc + if episode.title.to_lowercase().contains(term) {
                     100

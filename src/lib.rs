@@ -75,8 +75,12 @@ impl QueryParser {
         self.index += 1;
     }
 
-    pub fn is_end(&self) -> bool {
-        self.index >= self.source.len() - 1
+    pub fn is_at_end(&self) -> bool {
+        self.index >= self.source.len()
+    }
+
+    pub fn is_not_at_end(&self) -> bool {
+        !self.is_at_end()
     }
 }
 
@@ -84,25 +88,39 @@ pub fn parse_query(query: &str) -> Vec<String> {
     let mut parser = QueryParser::new(query);
     let mut parsed_items = Vec::new();
 
-    while !parser.is_end() {
-        if parser.peek() == '"' {
-            // skip '"'
-            parser.advance();
+    while parser.is_not_at_end() {
+        if parser.peek().is_alphanumeric() {
+            let mut term = String::new();
 
-            let mut result = String::new();
-
-            while !parser.is_end() && parser.peek() != '"' {
-                result.push(parser.peek());
+            while parser.is_not_at_end() && !parser.peek().is_whitespace() {
+                term.push(parser.peek());
                 parser.advance();
             }
 
+            parsed_items.push(term);
+
+            // skip ' '
+            parser.advance();
+        } else if parser.peek() == '"' {
             // skip '"'
             parser.advance();
 
-            parsed_items.push(result);
-        }
+            let mut inside_quotes = String::new();
 
-        parser.advance()
+            while parser.is_not_at_end() && parser.peek() != '"' {
+                inside_quotes.push(parser.peek());
+                parser.advance();
+            }
+
+            let terms = parse_query(&inside_quotes.clone());
+            parsed_items.extend(terms);
+            parsed_items.push(inside_quotes);
+
+            // skip '"'
+            parser.advance();
+        } else if parser.peek().is_whitespace() {
+            parser.advance();
+        }
     }
 
     parsed_items
@@ -126,15 +144,46 @@ pub fn load_common_words() -> HashSet<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_query;
+    use super::parse_query;
 
     #[test]
-    fn test_parse_query() {
+    fn test_basic_query() {
+        let query = String::from("foo bar bee");
+        let results = parse_query(&query);
+        assert!(results.len() > 0);
+
+        assert_eq!(results.get(0), Some(&String::from("foo")));
+        assert_eq!(results.get(1), Some(&String::from("bar")));
+        assert_eq!(results.get(2), Some(&String::from("bee")));
+    }
+
+    #[test]
+    fn test_quote_query() {
+        let query = String::from(r#"   "foo bar"   "fizz buzz"   "#);
+        let results = parse_query(&query);
+        assert!(results.len() > 0);
+
+        assert!(results.contains(&String::from("foo")));
+        assert!(results.contains(&String::from("bar")));
+        assert!(results.contains(&String::from("foo bar")));
+
+        assert!(results.contains(&String::from("fizz")));
+        assert!(results.contains(&String::from("buzz")));
+        assert!(results.contains(&String::from("fizz buzz")));
+    }
+
+    #[test]
+    fn test_mixed_query() {
         let query = String::from(r#"foo bar "wire shark" "super user""#);
         let results = parse_query(&query);
 
         assert!(results.len() > 0);
-        assert_eq!(results[0], "wire shark");
-        assert_eq!(results[1], "super user");
+        assert!(results.contains(&String::from("foo")));
+        assert!(results.contains(&String::from("wire")));
+        assert!(results.contains(&String::from("shark")));
+        assert!(results.contains(&String::from("wire shark")));
+        assert!(results.contains(&String::from("super")));
+        assert!(results.contains(&String::from("user")));
+        assert!(results.contains(&String::from("super user")));
     }
 }
