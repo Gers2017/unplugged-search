@@ -4,12 +4,14 @@ import requests
 import json
 from bs4 import BeautifulSoup as BS
 from dataclasses import dataclass
-from typing import List, Dict, Tuple
+from typing import List, Dict, Set
 import re
+import os
 
 LINUX_UNPLUGGED_URL = "https://linuxunplugged.com"
-EPISODES_FILENAME = "episodes_index.json"
-BY_TAG_FILENAME = "tags_index.json"
+EPISODES_BY_ID_FILENAME = "episodes_by_id_index.json"
+EPISODES_BY_TAG_FILENAME = "episodes_by_tag_index.json"
+TAGS_BY_TAG = "tags_by_tag_index.json"
 
 
 @dataclass
@@ -21,15 +23,18 @@ class Episode:
     tags: List[str]
     url: str
 
-    def to_json(self) -> str:
-        return json.dumps(self.__dict__)
+    def toJSON(self) -> str:
+        return json.dumps(self.__dict__, indent=2, sort_keys=True)
 
 
-def filter_empty_items(str_list: List[str]) -> List[str]:
+Episodes = List[Episode]
+
+
+def filter_empty_items(items: List[str]) -> List[str]:
     return list(
         filter(
             lambda x: len(x) > 0,
-            [s.replace("\n", "").strip() for s in str_list]
+            [s.replace("\n", "").strip() for s in items]
         )
     )
 
@@ -61,14 +66,14 @@ def get_page_content(page_id: int) -> str:
 
     # raise exception if there's an error
     response.raise_for_status()
-    return response.content
+    return response.text
 
 
-def parse_page_content_to_episodes(content: str) -> List[Episode]:
+def page_content_to_episodes(content: str) -> Episodes:
     soup = BS(content, "html.parser")
     episode_selector = "list-item prose"
     html_episode_list = soup.find_all("div", class_=episode_selector)
-    episodes_out: List[Episode] = []
+    episodes: Episodes = []
 
     for html_episode in html_episode_list:
         # href
@@ -85,82 +90,77 @@ def parse_page_content_to_episodes(content: str) -> List[Episode]:
         # get date
         times = filter_empty_items([d.text for d in span_elements[0]])
         date = parse_date(times[0])
-        duration = times[1].strip()
+        duration = times[1]
 
         # get tags
         tags = filter_empty_items(span_elements[1].text.split(","))
 
-        episodes_out.append(
+        episodes.append(
             Episode(episode_id, title, date, duration, tags, episode_url))
 
-    return episodes_out
+    return episodes
 
 
-def get_episodes_from_range(start: int, end: int) -> List[Episode]:
-    assert start > 0
-    assert end > start
+def download_pages(start: int, end: int):
+    if not os.path.isdir("pages/"):
+        os.mkdir("pages/")
 
-    all_episodes: List[Episode] = []
+    for i in range(start, end + 1):
+        content = get_page_content(i)
 
-    for page_id in range(start, end):
-        print(f"Indexing page: {page_id}")
-        content = get_page_content(page_id)
-        episodes = parse_page_content_to_episodes(content)
+        assert type(content) == str
+
+        with open(f"pages/page_{i}.html", "w") as f:
+            f.write(content)
+
+
+def get_all_episodes() -> Episodes:
+    all_episodes: Episodes = []
+
+    for file in [file for file in os.listdir("pages/") if file.endswith(".html")]:
+        print(f"Parsing page \"{file}\" to episodes")
+
+        with open(f"pages/{file}", "r") as f:
+            content = f.read()
+
+        episodes = page_content_to_episodes(content)
         all_episodes.extend(episodes)
 
     return all_episodes
 
 
-def index_episodes_from_range(start: int, end: int) -> Tuple[List[Episode], bool]:
-    try:
-        # the juicy stuff
-        episodes = get_episodes_from_range(start, end + 1)
-        save_episodes_to_json(episodes)
+def index_episodes(all_episodes: Episodes) -> None:
+    episodes_by_id: Dict[int, Episode] = dict()
+    episodes_by_tag: Dict[str, List[str]] = dict()
+    all_tags: Set[str] = set()
+    tags_to_list: Dict[str, List[str]] = dict()
 
-        tag_map = generate_tag_map(episodes)
-        save_tag_map_to_json(tag_map)
-    except Exception as e:
-        print(f"Error: {e}")
-        return ([], False)
+    for episode in all_episodes:
+        # map id episode to episode
+        episodes_by_id[episode.id] = episode
 
-    return (episodes, True)
+        for tag in set(episode.tags):
+            # map tag to episode
+            tag = tag.lower().strip()
+            episodes_by_tag[tag] = episode
+            all_tags.add(tag)
 
+    for tag in all_tags:
+        # map tag to similar tags
+        tags_to_list[tag] = [x for x in all_tags if x.find(tag) != -1]
 
-def save_episodes_to_json(episodes: List[Episode]):
-    episodes_json = ",\n".join(
-        [f"\"{ep.id}\": " + ep.to_json() for ep in episodes])
+    episodes_by_id = {k: v.__dict__ for k, v in episodes_by_id.items()}
+    episodes_by_tag = {k: v.__dict__ for k, v in episodes_by_tag.items()}
 
-    content = "{" + episodes_json + "}"
-    with open(EPISODES_FILENAME, "w") as f:
-        f.write(content)
-
-
-def generate_tag_map(episodes: List[Episode]) -> Dict[str, List[Episode]]:
-    tag_map: Dict[str, List[Episode]] = {}
-
-    for ep in episodes:
-        for tag in ep.tags:
-            episode_list = tag_map.get(tag, [])
-            episode_list.append(ep)
-            tag_map[tag] = episode_list
-    return tag_map
+    write_file(EPISODES_BY_ID_FILENAME, json.dumps(
+        episodes_by_id, indent=2, sort_keys=True))
+    write_file(EPISODES_BY_TAG_FILENAME,
+               json.dumps(episodes_by_tag, indent=2, sort_keys=True))
+    write_file(TAGS_BY_TAG, json.dumps(tags_to_list, indent=2, sort_keys=True))
 
 
-def save_tag_map_to_json(tag_map: Dict[str, List[Episode]]):
-    entries: List[str] = []
-
-    for tag, episodes in tag_map.items():
-        episodes_json = ",\n".join([ep.to_json() for ep in episodes])
-        episodes_json = f"[{episodes_json}]"
-
-        assert len(tag) > 0
-
-        entry = f"\"{tag}\": {episodes_json}"
-        entries.append(entry)
-
-    content = ",\n".join(entries)
-    content = "{" + f"\n{content}\n" + "}"
-    with open(BY_TAG_FILENAME, "w") as f:
+def write_file(path_to_file: str, content: str):
+    with open(path_to_file, "w") as f:
         f.write(content)
 
 
@@ -173,29 +173,41 @@ def main():
         default=[1, 1],
         type=int,
         nargs=2,
-        help="range of pages to parse, [s,e] where s and e are integers and e is inclusive"
+        help="Range of pages to parse, [s,e] where s and e are integers and e is inclusive"
+    )
+
+    parser.add_argument(
+        "--download",
+        default=False,
+        action="store_true",
+        help="Should the script download new data or use the local data"
     )
 
     args = parser.parse_args()
-    [start_index, end_index] = args.range
+    [start, end] = args.range
 
-    if start_index < 1:
+    if start < 1:
         raise Exception(
             "Invalid start_index, start_index must be greater than zero")
-    if end_index < start_index:
+    if end < start:
         raise Exception(
             "Invalid end_index, end_index can't be less than start_index")
 
-    print(f"indexing from {start_index} to {end_index}")
+    print(f"[:::::::]  Indexing from {start} to {end}  [:::::::] ")
 
     start_time = time.time()
-    episodes, ok = index_episodes_from_range(start_index, end_index)
+
+    if args.download:
+        download_pages(start, end)
+
+    all_episodes = get_all_episodes()
+
+    index_episodes(all_episodes)
     end_time = time.time()
 
-    if ok:
-        print(f"-- completed --")
-        print(f"processed episodes: {len(episodes)}")
-        print(f"took: {(end_time - start_time)}s")
+    print(f"[:::::::]  COMPLETED  [:::::::]")
+    print(f"Episodes: {len(all_episodes)}")
+    print(f"Took: {(end_time - start_time)}s")
 
 
 if __name__ == "__main__":

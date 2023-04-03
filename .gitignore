@@ -1,4 +1,5 @@
 /target
 /ignore
+/pages
 **/*/__pycache__
 **/*index.json
