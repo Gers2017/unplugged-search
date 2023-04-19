@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tera::{Context, Tera};
 use unplugged_engine::{
     get_episodes_from_ids, load_common_words, parse_episodes_by_id, parse_episodes_by_tag,
-    parse_query, Episode, EpisodesById, EpisodesByTag,
+    parse_query, Episode, EpisodesById, EpisodesByTag, ParseResult,
 };
 
 pub fn compile_templates() -> Tera {
@@ -27,7 +27,7 @@ pub struct AppState {
     pub tera: Tera,
 }
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[tokio::main]
 async fn main() {
@@ -74,11 +74,15 @@ async fn handle_search(
     let query = search.query.clone();
     let mut search_results: HashSet<Episode> = HashSet::new();
 
-    let terms: HashSet<_> = parse_query(&query)
+    let ParseResult { terms, exclude } = parse_query(&query);
+
+    let terms: HashSet<_> = terms
         .iter()
         .map(|s| s.to_lowercase())
         .filter(|s| !state.common_words.contains(s))
         .collect();
+
+    let exclude: HashSet<_> = HashSet::from_iter(exclude.into_iter());
 
     let episodes_by_tag: HashMap<String, Vec<&Episode>> = state
         .episodes_by_tag
@@ -110,6 +114,18 @@ async fn handle_search(
             search_results.insert(episode.clone());
         }
     }
+
+    // filtering the results
+
+    let search_results: HashSet<_> = search_results
+        .into_iter()
+        .filter(|episode| {
+            !episode
+                .tags
+                .iter()
+                .any(|tag| exclude.iter().any(|token| tag.contains(token)))
+        })
+        .collect();
 
     // sorting results
 
@@ -147,10 +163,12 @@ async fn handle_search(
         println!("{}", "-------".repeat(3));
         println!("Query: {}", &search.query);
         println!("Search terms: {:?}", &terms);
+        println!("Exclude terms: {:?}", &exclude);
 
-        println!("score  |  title");
+        println!("score  | title");
+        println!("{}{}{}", "_".repeat(7), "+", "_".repeat(8));
         for (score, ep) in &search_results_with_score[..] {
-            println!("{}  | {}", score, ep.title);
+            println!("{0:>4}   |  {1}", score, ep.title);
         }
     }
 
