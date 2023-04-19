@@ -24,14 +24,16 @@ pub struct AppState {
     pub episodes_by_tag: EpisodesByTag,
     pub episodes_by_id: EpisodesById,
     pub common_words: HashSet<String>,
+    pub is_debug: bool,
     pub tera: Tera,
 }
 
-const DEBUG: bool = true;
-
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let is_debug = match std::env::var("DEBUG") {
+        Ok(value) => value.to_lowercase() == "true",
+        _ => false,
+    };
 
     let episodes_by_tag = parse_episodes_by_tag().await;
     let episodes_by_id = parse_episodes_by_id().await;
@@ -50,11 +52,12 @@ async fn main() {
             episodes_by_tag,
             episodes_by_id,
             common_words,
+            is_debug,
             tera,
         }));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    tracing::info!("listening on {}", addr);
+    println!("Web server listening on {}", addr);
 
     Server::bind(&addr)
         .serve(app.into_make_service())
@@ -156,10 +159,7 @@ async fn handle_search(
 
     search_results_with_score.sort_by(|(a_score, _), (b_score, _)| b_score.cmp(a_score));
 
-    tracing::debug!("query: {:?}", &search.query);
-    tracing::debug!("search terms: {:?}", &terms);
-
-    if DEBUG {
+    if state.is_debug {
         println!("{}", "-------".repeat(3));
         println!("Query: {}", &search.query);
         println!("Search terms: {:?}", &terms);
