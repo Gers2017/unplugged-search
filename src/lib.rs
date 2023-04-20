@@ -13,9 +13,9 @@ pub struct Episode {
     pub url: String,
 }
 
-impl Into<String> for Episode {
-    fn into(self) -> String {
-        serde_json::to_string_pretty(&self).expect("Error at stringify json")
+impl From<Episode> for String {
+    fn from(value: Episode) -> Self {
+        serde_json::to_string_pretty(&value).expect("Error stringify json")
     }
 }
 
@@ -45,7 +45,7 @@ where
 {
     let contents = tokio::fs::read_to_string(file)
         .await
-        .expect(&format!("Error at parsing {} file to json", &file));
+        .unwrap_or_else(|_| panic!("Error at parsing {} file to json", &file));
 
     serde_json::from_str::<T>(&contents).expect("Error at parsing to json file")
 }

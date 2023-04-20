@@ -15,8 +15,7 @@ use unplugged_engine::{
 };
 
 pub fn compile_templates() -> Tera {
-    let tera = Tera::new("templates/**/*.html").expect("Error at compiling templates");
-    tera
+    Tera::new("templates/**/*.html").expect("Error at compiling templates")
 }
 
 #[derive(Clone)]
@@ -166,7 +165,7 @@ async fn handle_search(
         println!("Exclude terms: {:?}", &exclude);
 
         println!("score  | title");
-        println!("{}{}{}", "_".repeat(7), "+", "_".repeat(8));
+        println!("{}+{}", "_".repeat(7), "_".repeat(8));
         for (score, ep) in &search_results_with_score[..] {
             println!("{0:>4}   |  {1}", score, ep.title);
         }

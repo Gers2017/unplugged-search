@@ -24,11 +24,11 @@ impl QueryParser {
     }
 
     pub fn peek_previous(&self) -> Option<char> {
-        self.source.get(self.index - 1).map(|ch| ch).copied()
+        self.source.get(self.index - 1).copied()
     }
 
     pub fn peek_next(&self) -> Option<char> {
-        self.source.get(self.index + 1).map(|ch| ch).copied()
+        self.source.get(self.index + 1).copied()
     }
 
     pub fn is_whitespace(&self) -> bool {
@@ -115,7 +115,7 @@ impl QueryParser {
         while let Some(token) = self.get_token() {
             if token.starts_with('-') {
                 let exclude_token = token.trim_start_matches('-').to_string();
-                if exclude_token.len() > 0 {
+                if !exclude_token.is_empty() {
                     exclude.push(exclude_token.trim().to_string());
                 }
             } else {
@@ -123,7 +123,7 @@ impl QueryParser {
             }
         }
 
-        ParseResult { terms,exclude }
+        ParseResult { terms, exclude }
     }
 }
 
@@ -166,7 +166,7 @@ mod tests {
         );
 
         let mut parser = QueryParser::new(&query);
-        let ParseResult {terms, exclude} = parser.parse();
+        let ParseResult { terms, exclude } = parser.parse();
 
         println!("results\nterms: {:?}\nexclude: {:?}", &terms, &exclude);
 
@@ -186,9 +186,9 @@ mod tests {
         let query =
             String::from("  -  nixos \"-- kde\"  ----- docker low-memory-monitor  dnf-fedora ");
         //                  ^ counts as exclude    ^ ignore extra '-' and exclude    ^ this is ok
-        
+
         let mut parser = QueryParser::new(&query);
-        let ParseResult {terms, exclude} = parser.parse();
+        let ParseResult { terms, exclude } = parser.parse();
 
         println!("results\nterms: {:?}\nexclude: {:?}", &terms, &exclude);
 
