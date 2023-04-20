@@ -24,11 +24,11 @@ impl QueryParser {
     }
 
     pub fn peek_previous(&self) -> Option<char> {
-        self.source.get(self.index - 1).map(|ch| ch.clone())
+        self.source.get(self.index - 1).map(|ch| ch).copied()
     }
 
     pub fn peek_next(&self) -> Option<char> {
-        self.source.get(self.index + 1).map(|ch| ch.clone())
+        self.source.get(self.index + 1).map(|ch| ch).copied()
     }
 
     pub fn is_whitespace(&self) -> bool {
@@ -108,7 +108,10 @@ impl QueryParser {
         Some(token)
     }
 
-    pub fn parse(&mut self, terms: &mut Vec<String>, exclude: &mut Vec<String>) -> () {
+    pub fn parse(&mut self) -> ParseResult {
+        let mut terms = Vec::new();
+        let mut exclude = Vec::new();
+
         while let Some(token) = self.get_token() {
             if token.starts_with('-') {
                 let exclude_token = token.trim_start_matches('-').to_string();
@@ -119,6 +122,8 @@ impl QueryParser {
                 terms.push(token.trim().to_string());
             }
         }
+
+        ParseResult { terms,exclude }
     }
 }
 
@@ -129,16 +134,13 @@ pub struct ParseResult {
 
 pub fn parse_query(query: &str) -> ParseResult {
     let mut parser = QueryParser::new(query);
-    let mut terms = Vec::new();
-    let mut exclude = Vec::new();
-
-    parser.parse(&mut terms, &mut exclude);
-
-    ParseResult { terms, exclude }
+    parser.parse()
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::ParseResult;
+
     use super::QueryParser;
 
     #[test]
@@ -162,12 +164,9 @@ mod tests {
         let query = String::from(
             "  \"docker compose\"  -dotnet -\"windows server\"  \"chocolate cupcakes\" 😸😸😸 ",
         );
+
         let mut parser = QueryParser::new(&query);
-
-        let mut terms = Vec::new();
-        let mut exclude = Vec::new();
-
-        parser.parse(&mut terms, &mut exclude);
+        let ParseResult {terms, exclude} = parser.parse();
 
         println!("results\nterms: {:?}\nexclude: {:?}", &terms, &exclude);
 
@@ -187,12 +186,9 @@ mod tests {
         let query =
             String::from("  -  nixos \"-- kde\"  ----- docker low-memory-monitor  dnf-fedora ");
         //                  ^ counts as exclude    ^ ignore extra '-' and exclude    ^ this is ok
+        
         let mut parser = QueryParser::new(&query);
-
-        let mut terms = Vec::new();
-        let mut exclude = Vec::new();
-
-        parser.parse(&mut terms, &mut exclude);
+        let ParseResult {terms, exclude} = parser.parse();
 
         println!("results\nterms: {:?}\nexclude: {:?}", &terms, &exclude);
 
