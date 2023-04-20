@@ -2,6 +2,7 @@ use axum::extract::{Query, State};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, get_service};
 use axum::{Router, Server};
+use log::{debug, info};
 use tower_http::services::{ServeDir, ServeFile};
 
 use serde::Deserialize;
@@ -23,16 +24,12 @@ pub struct AppState {
     pub episodes_by_tag: EpisodesByTag,
     pub episodes_by_id: EpisodesById,
     pub common_words: HashSet<String>,
-    pub is_debug: bool,
     pub tera: Tera,
 }
 
 #[tokio::main]
 async fn main() {
-    let is_debug = match std::env::var("DEBUG") {
-        Ok(value) => value.to_lowercase() == "true",
-        _ => false,
-    };
+    env_logger::init();
 
     let episodes_by_tag = parse_episodes_by_tag().await;
     let episodes_by_id = parse_episodes_by_id().await;
@@ -43,7 +40,6 @@ async fn main() {
     let serve_dir = ServeDir::new("static");
 
     let app = Router::new()
-        // bellow maybe serve a svelte site?
         .route("/", get_service(ServeFile::new("static/index.html")))
         .route("/search", get(handle_search)) // search?query=foo
         .fallback_service(serve_dir)
@@ -51,12 +47,16 @@ async fn main() {
             episodes_by_tag,
             episodes_by_id,
             common_words,
-            is_debug,
             tera,
         }));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Web server listening on {}", addr);
+
+    info!(
+        "Web server listening on {} (http://localhost:{})",
+        addr,
+        addr.port()
+    );
 
     Server::bind(&addr)
         .serve(app.into_make_service())
@@ -158,18 +158,17 @@ async fn handle_search(
 
     search_results_with_score.sort_by(|(a_score, _), (b_score, _)| b_score.cmp(a_score));
 
-    if state.is_debug {
-        println!("{}", "-------".repeat(3));
-        println!("Query: {}", &search.query);
-        println!("Search terms: {:?}", &terms);
-        println!("Exclude terms: {:?}", &exclude);
+    debug!(
+        "Query: {}, Search terms: {:?}, Exclude: {:?}",
+        &search.query, &terms, &exclude
+    );
 
-        println!("score  | title");
-        println!("{}+{}", "_".repeat(7), "_".repeat(8));
-        for (score, ep) in &search_results_with_score[..] {
-            println!("{0:>4}   |  {1}", score, ep.title);
-        }
+    debug!("score  | title");
+    debug!("{}+{}", "_".repeat(7), "_".repeat(8));
+    for (score, ep) in &search_results_with_score[..] {
+        debug!("{0:>4}   |  {1}", score, ep.title);
     }
+    debug!("{}", "-------".repeat(3));
 
     let search_results: Vec<_> = search_results_with_score
         .iter()

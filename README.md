@@ -65,17 +65,13 @@ python index/main.py --help
 cargo run --release
 ```
 
-Set the `DEBUG` variable to enable logging
+Logging debug info
 
 ```sh
-export DEBUG=true; cargo run --release
+RUST_LOG=unplugged_engine=debug cargo run --release
 ```
 
-The web server is listening on
-
-```sh
-127.0.0.1:3000
-```
+The web server is listening on [http://localhost:3000](http://localhost:3000)
 
 ## Usage
 

@@ -12,3 +12,5 @@ serde = { version = "1.0.158", features = ["derive"] }
 serde_json = "1.0.94"
 tokio = { version = "1.26.0", features = ["macros", "rt-multi-thread", "fs"] }
 tower-http = { version = "0.4.0", features = ["fs", "trace"] }
+env_logger = "0.10.0"
+log = "0.4.17"
