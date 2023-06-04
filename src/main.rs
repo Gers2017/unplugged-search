@@ -74,7 +74,7 @@ async fn handle_search(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let query = search.query.clone();
-    let mut search_results: HashSet<Episode> = HashSet::new();
+    let mut results: HashSet<Episode> = HashSet::new();
 
     let ParseResult { terms, exclude } = parse_query(&query);
 
@@ -100,11 +100,16 @@ async fn handle_search(
             .iter()
             .any(|term| tag.contains(term) || term.contains(tag))
         {
-            search_results.extend(episodes.iter().map(|episode| (**episode).clone()));
+            results.extend(episodes.iter().map(|episode| (**episode).clone()));
         }
     }
 
     for (id, episode) in state.episodes_by_id.iter() {
+        // skip episode already seen
+        if results.contains(episode) {
+            continue;
+        }
+
         // if any of the search terms matches a word in the title
         let episode_id = id.to_string();
 
@@ -113,25 +118,27 @@ async fn handle_search(
                 .iter()
                 .any(|term| episode.title.to_lowercase().contains(term))
         {
-            search_results.insert(episode.clone());
+            results.insert(episode.clone());
         }
     }
 
     // filtering the results
 
-    let search_results: HashSet<_> = search_results
-        .into_iter()
-        .filter(|episode| {
-            !episode
-                .tags
-                .iter()
-                .any(|tag| exclude.iter().any(|token| tag.contains(token)))
-        })
-        .collect();
+    if !exclude.is_empty() {
+        results = results
+            .into_iter()
+            .filter(|episode| {
+                !episode
+                    .tags
+                    .iter()
+                    .any(|tag| exclude.iter().any(|excl_token| tag.contains(excl_token)))
+            })
+            .collect();
+    }
 
     // sorting results
 
-    let mut search_results_with_score: Vec<_> = search_results
+    let mut results_with_score: Vec<_> = results
         .iter()
         .map(|episode| {
             let mut score = episode.tags.iter().fold(0, |acc, tag| {
@@ -156,7 +163,7 @@ async fn handle_search(
         })
         .collect();
 
-    search_results_with_score.sort_by(|(a_score, _), (b_score, _)| b_score.cmp(a_score));
+    results_with_score.sort_by(|(a_score, _), (b_score, _)| b_score.cmp(a_score));
 
     debug!(
         "Query: {}, Search terms: {:?}, Exclude: {:?}",
@@ -165,15 +172,12 @@ async fn handle_search(
 
     debug!("score  | title");
     debug!("{}+{}", "_".repeat(7), "_".repeat(8));
-    for (score, ep) in &search_results_with_score[..] {
+    for (score, ep) in &results_with_score[..] {
         debug!("{0:>4}   |  {1}", score, ep.title);
     }
     debug!("{}", "-------".repeat(3));
 
-    let search_results: Vec<_> = search_results_with_score
-        .iter()
-        .map(|(_, ep)| *ep)
-        .collect();
+    let search_results: Vec<_> = results_with_score.iter().map(|(_, ep)| *ep).collect();
 
     // reply with a tera template
 
